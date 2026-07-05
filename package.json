@@ -1,0 +1,59 @@
+{
+  "name": "nullware",
+  "version": "1.0.0",
+  "description": "Security and developer-friendly web browser with minimal bloatware and built-in toggleable ad-blocker",
+  "main": "tools/build.js",
+  "scripts": {
+    "build": "node tools/build.js",
+    "build:debug": "node tools/build.js --debug",
+    "build:release": "node tools/build.js --release",
+    "clean": "node tools/clean.js",
+    "test": "node tools/test.js",
+    "download-deps": "node tools/clone_deps.js",
+    "package": "node tools/package.js",
+    "lint": "eslint tools/*.js",
+    "precommit": "npm run lint"
+  },
+  "keywords": [
+    "browser",
+    "security",
+    "privacy",
+    "adblocker",
+    "chromium",
+    "cef",
+    "web",
+    "developer-tools"
+  ],
+  "author": "Human757",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^7.0.1",
+    "axios": "^1.6.0",
+    "fs-extra": "^11.1.1",
+    "path": "^0.12.7",
+    "child_process": "^1.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.50.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-node": "^11.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/human757-fin/nullware.git"
+  },
+  "bugs": {
+    "url": "https://github.com/human757-fin/nullware/issues"
+  },
+  "homepage": "https://github.com/human757-fin/nullware#readme",
+  "config": {
+    "cef_version": "115.7.180+ge06b462+chromium-115.0.5790.170",
+    "chromium_version": "115.0.5790.170"
+  }
+}

@@ -1,0 +1,109 @@
+# NullWare Browser - Git Ignore
+
+# Build directories
+build/
+bin/
+lib/
+obj/
+
+# IDE specific files
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# CEF and Chromium build files
+third_party/cef/
+third_party/chromium/
+
+# Log files
+*.log
+nullware_debug.log
+
+# Cache directories
+cache/
+nullware_data/
+
+# Temporary files
+tmp/
+temp/
+
+# User data
+user_data/
+profile/
+
+# Crash dumps
+*.dmp
+
+# Environment files
+.env
+.env.local
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Visual Studio
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Xcode
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace/
+
+# Compiler specific files
+*.o
+*.a
+*.so
+*.dll
+*.exe
+*.lib
+*.dylib
+
+# Debug symbols
+*.pdb
+*.idb
+
+# Coverage files
+*.gcda
+*.gcno
+
+# Test results
+*.xml
+*.trs
+
+# Package files
+*.tar.gz
+*.zip
+*.tar.bz2
+
+# Installer files
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# Documentation build
+_doxygen/
+doc/
+
+# Custom ignore patterns
+*.bak
+*.old
+*.orig
+*.rej
