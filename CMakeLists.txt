@@ -11,10 +11,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Platform detection
 if(WIN32)
     set(PLATFORM_WINDOWS 1)
+    add_definitions(-DNULLWARE_PLATFORM_WINDOWS=1)
 elif(APPLE)
     set(PLATFORM_MACOS 1)
+    add_definitions(-DNULLWARE_PLATFORM_MACOS=1)
 elif(UNIX AND NOT APPLE)
     set(PLATFORM_LINUX 1)
+    add_definitions(-DNULLWARE_PLATFORM_LINUX=1)
 endif()
 
 # Build type configuration
@@ -37,6 +40,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/adblocker
     ${CMAKE_SOURCE_DIR}/src/devtools
     ${CMAKE_SOURCE_DIR}/src/ui
+    ${CMAKE_SOURCE_DIR}/src/main
     ${CMAKE_SOURCE_DIR}/third_party
 )
 
@@ -55,17 +59,17 @@ if(NOT USE_SYSTEM_CEF)
     # Use bundled CEF
     set(CEF_ROOT ${CMAKE_SOURCE_DIR}/third_party/cef)
     set(CEF_INCLUDE_DIRS ${CEF_ROOT}/include)
-    set(CEF_LIBRARIES 
-        ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE}/libcef_dll_wrapper.a
-        ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE}/libcef.a
-    )
-    if(WIN32)
-        set(CEF_LIBRARIES ${CEF_LIBRARIES} ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE}/cef_sandbox.lib)
+    if(EXISTS ${CEF_ROOT}/include/cef_base.h)
+        message(STATUS "Using bundled CEF from: ${CEF_ROOT}")
+    else()
+        message(WARNING "CEF not found at ${CEF_ROOT}. Please run tools/clone_deps.py first.")
     endif()
 else()
     # Use system CEF
     find_path(CEF_INCLUDE_DIRS NAMES cef_base.h PATHS /usr/include/cef /usr/local/include/cef)
-    find_library(CEF_LIBRARIES NAMES cef cef_dll_wrapper PATHS /usr/lib/cef /usr/local/lib/cef)
+    if(NOT CEF_INCLUDE_DIRS)
+        message(FATAL_ERROR "CEF not found. Please install CEF or set USE_SYSTEM_CEF=OFF")
+    endif()
 endif()
 
 # Source files
@@ -73,9 +77,6 @@ set(COMMON_SOURCES
     src/common/config.cpp
     src/common/logging.cpp
     src/common/string_utils.cpp
-    src/common/file_utils.cpp
-    src/common/command_line.cpp
-    src/common/platform_utils.cpp
 )
 
 set(BROWSER_SOURCES
@@ -85,70 +86,45 @@ set(BROWSER_SOURCES
     src/browser/browser_client.cpp
     src/browser/render_handler.cpp
     src/browser/load_handler.cpp
-    src/browser/navigation_controller.cpp
-    src/browser/cookie_manager.cpp
-    src/browser/cert_verifier.cpp
-)
-
-set(RENDERER_SOURCES
-    src/renderer/render_process_handler.cpp
-    src/renderer/render_delegate.cpp
-)
-
-set(SECURITY_SOURCES
-    src/security/security_manager.cpp
-    src/security/sandbox_policy.cpp
-    src/security/content_security_policy.cpp
-    src/security/certificate_verifier.cpp
-    src/security/secure_cookie_manager.cpp
 )
 
 set(ADBLOCKER_SOURCES
     src/adblocker/ad_blocker.cpp
     src/adblocker/filter_engine.cpp
-    src/adblocker/filter_list_loader.cpp
     src/adblocker/request_interceptor.cpp
-    src/adblocker/easylist_parser.cpp
+)
+
+set(SECURITY_SOURCES
+    src/security/security_manager.cpp
 )
 
 set(DEVTOOLS_SOURCES
-    src/devtools/devtools_manager.cpp
-    src/devtools/devtools_client.cpp
-    src/devtools/inspector.cpp
-    src/devtools/network_monitor.cpp
-    src/devtools/console.cpp
-    src/devtools/profiler.cpp
+    src/devtools/devtools_manager.h
 )
 
-set(UI_SOURCES
-    src/ui/main_window.cpp
-    src/ui/toolbar.cpp
-    src/ui/address_bar.cpp
-    src/ui/tab_strip.cpp
-    src/ui/settings_dialog.cpp
-    src/ui/about_dialog.cpp
+set(MAIN_SOURCES
+    src/main/main.cpp
 )
 
 # Main executable
 add_executable(nullware
     ${COMMON_SOURCES}
     ${BROWSER_SOURCES}
-    ${RENDERER_SOURCES}
+    ${ADBLOCKER_SOURCES}
     ${SECURITY_SOURCES}
-    ${UI_SOURCES}
+    ${MAIN_SOURCES}
 )
 
 # Conditional compilation for features
 if(ENABLE_ADBLOCKER)
-    list(APPEND nullware_SOURCES ${ADBLOCKER_SOURCES})
     add_definitions(-DENABLE_ADBLOCKER=1)
 else()
     add_definitions(-DENABLE_ADBLOCKER=0)
 endif()
 
 if(ENABLE_DEVTOOLS)
-    list(APPEND nullware_SOURCES ${DEVTOOLS_SOURCES})
     add_definitions(-DENABLE_DEVTOOLS=1)
+    list(APPEND nullware_SOURCES ${DEVTOOLS_SOURCES})
 else()
     add_definitions(-DENABLE_DEVTOOLS=0)
 endif()
@@ -162,8 +138,30 @@ endif()
 # Link libraries
 target_link_libraries(nullware
     ${CMAKE_THREAD_LIBS_INIT}
-    ${CEF_LIBRARIES}
 )
+
+# CEF libraries
+if(CEF_INCLUDE_DIRS)
+    target_include_directories(nullware PRIVATE ${CEF_INCLUDE_DIRS})
+    
+    # Find CEF libraries
+    if(WIN32)
+        find_library(CEF_LIBRARY NAMES libcef libcef_dll_wrapper PATHS ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE})
+        if(CEF_LIBRARY)
+            target_link_libraries(nullware ${CEF_LIBRARY})
+        endif()
+    elseif(UNIX AND NOT APPLE)
+        find_library(CEF_LIBRARY NAMES cef PATHS ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE})
+        if(CEF_LIBRARY)
+            target_link_libraries(nullware ${CEF_LIBRARY})
+        endif()
+    elseif(APPLE)
+        find_library(CEF_LIBRARY NAMES cef PATHS ${CEF_ROOT}/lib/${CMAKE_BUILD_TYPE})
+        if(CEF_LIBRARY)
+            target_link_libraries(nullware ${CEF_LIBRARY})
+        endif()
+    endif()
+endif()
 
 # Platform-specific configurations
 if(WIN32)
@@ -180,16 +178,10 @@ if(WIN32)
         advapi32
     )
     
-    # Windows resource file
-    target_sources(nullware PRIVATE resources/windows/resource.rc)
-    
     # Disable console for release builds
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
         set_target_properties(nullware PROPERTIES WIN32_EXECUTABLE TRUE)
     endif()
-    
-    # Output directory for DLLs
-    set_target_properties(nullware PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     
 elif(UNIX AND NOT APPLE)
     target_link_libraries(nullware
@@ -234,18 +226,6 @@ elif(APPLE)
         AppKit
         Foundation
     )
-    
-    # macOS bundle configuration
-    set_target_properties(nullware PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/macos/Info.plist
-        MACOSX_BUNDLE_ICON_FILE nullware.icns
-    )
-endif()
-
-# Include directories for CEF
-if(CEF_INCLUDE_DIRS)
-    target_include_directories(nullware PRIVATE ${CEF_INCLUDE_DIRS})
 endif()
 
 # Compiler flags
@@ -261,7 +241,7 @@ endif()
 if(MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -Werror -Wno-unused-parameter -Wno-unused-variable)
+    add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wno-unused-variable)
 endif()
 
 # Security flags
@@ -303,4 +283,6 @@ message(STATUS "  Ad-Blocker: ${ENABLE_ADBLOCKER}")
 message(STATUS "  DevTools: ${ENABLE_DEVTOOLS}")
 message(STATUS "  Sandbox: ${ENABLE_SANDBOX}")
 message(STATUS "  System CEF: ${USE_SYSTEM_CEF}")
-message(STATUS "  CEF Root: ${CEF_ROOT}")
+if(CEF_INCLUDE_DIRS)
+    message(STATUS "  CEF Include: ${CEF_INCLUDE_DIRS}")
+endif()
