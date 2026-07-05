@@ -1,61 +1,16 @@
 #include <include/cef_app.h>
 #include <include/cef_client.h>
-#include <include/cef_render_handler.h>
 
+#include "src/ui/main_window.h"
+#include "src/browser/browser_client.h"
 #include "src/common/logging.h"
 #include "src/common/config.h"
 #include "src/adblocker/ad_blocker.h"
-#include "src/browser/browser_client.h"
 
 #include <iostream>
 #include <string>
 
-// Simple application that creates a browser window
-class SimpleHandler : public CefClient,
-                      public CefLifeSpanHandler,
-                      public CefLoadHandler {
-public:
-    SimpleHandler() = default;
-    ~SimpleHandler() override = default;
-    
-    // CefClient methods
-    virtual CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override {
-        return this;
-    }
-    
-    virtual CefRefPtr<CefLoadHandler> GetLoadHandler() override {
-        return this;
-    }
-    
-    // CefLifeSpanHandler methods
-    virtual void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
-        std::cout << "Browser created successfully!" << std::endl;
-    }
-    
-    virtual bool DoClose(CefRefPtr<CefBrowser> browser) override {
-        return false; // Allow browser to close
-    }
-    
-    virtual void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
-        std::cout << "Browser closing..." << std::endl;
-    }
-    
-    // CefLoadHandler methods
-    virtual void OnLoadStart(CefRefPtr<CefBrowser> browser,
-                           CefRefPtr<CefFrame> frame,
-                           TransitionType transition_type) override {
-        std::cout << "Loading: " << frame->GetURL().ToString() << std::endl;
-    }
-    
-    virtual void OnLoadEnd(CefRefPtr<CefBrowser> browser,
-                         CefRefPtr<CefFrame> frame,
-                         int http_status_code) override {
-        std::cout << "Loaded: " << frame->GetURL().ToString() 
-                  << " (Status: " << http_status_code << ")" << std::endl;
-    }
-    
-    IMPLEMENT_REFCOUNTING(SimpleHandler);
-};
+namespace nullware {
 
 // Application class
 class NullWareApp : public CefApp,
@@ -72,36 +27,69 @@ public:
     // CefBrowserProcessHandler methods
     virtual void OnContextInitialized() override {
         std::cout << "CEF context initialized" << std::endl;
+        LOG_INFO("CEF context initialized");
         
         // Initialize our systems
-        nullware::Logger::GetInstance().Initialize(
-            nullware::LogLevel::INFO, 
-            nullware::LogTarget::CONSOLE
+        Logger::GetInstance().Initialize(
+            LogLevel::INFO, 
+            LogTarget::CONSOLE
         );
         
-        nullware::ConfigManager::GetInstance().LoadFromCommandLine(0, nullptr);
+        // Load configuration from command line
+        int argc = 0;
+        char** argv = nullptr;
+        ConfigManager::GetInstance().LoadFromCommandLine(argc, argv);
         
         // Initialize ad-blocker
-        nullware::AdBlockerManager::GetInstance().Initialize();
+        AdBlockerManager::GetInstance().Initialize();
         
-        std::cout << "NullWare systems initialized" << std::endl;
+        // Create browser client
+        browser_client_ = new BrowserClient();
         
-        // Create browser window
-        CefWindowInfo window_info;
-        window_info.SetAsWindowless(nullptr); // Windowless rendering for simplicity
-        
-        CefBrowserSettings browser_settings;
-        
-        // Create the browser
-        CefBrowserHost::CreateBrowser(window_info, 
-                                      new SimpleHandler(), 
-                                      CefString("https://www.google.com"), 
-                                      browser_settings, 
-                                      nullptr);
+        // Create main window
+        main_window_ = new MainWindow();
+        if (main_window_->Initialize(browser_client_)) {
+            // Set main window in browser client
+            browser_client_->SetMainWindow(main_window_);
+            
+            // Show the main window
+            main_window_->Show();
+            
+            std::cout << "NullWare Browser ready!" << std::endl;
+            LOG_INFO("NullWare Browser ready");
+        } else {
+            std::cerr << "Failed to initialize main window" << std::endl;
+            LOG_ERROR("Failed to initialize main window");
+        }
     }
+    
+    virtual void OnBeforeCommandLineProcessing(
+        const CefString& process_type,
+        CefRefPtr<CefCommandLine> command_line) override {
+        
+        // Parse command line arguments
+        std::vector<std::string> args;
+        for (int i = 0; i < command_line->GetArgc(); i++) {
+            args.push_back(command_line->GetArgv()[i]);
+        }
+        
+        // Convert to char* array for ConfigManager
+        std::vector<char*> argv;
+        for (auto& arg : args) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        
+        ConfigManager::GetInstance().LoadFromCommandLine(static_cast<int>(argv.size()), argv.data());
+    }
+    
+private:
+    MainWindow* main_window_;
+    BrowserClient* browser_client_;
     
     IMPLEMENT_REFCOUNTING(NullWareApp);
 };
+
+}  // namespace nullware
 
 // Entry point
 int main(int argc, char* argv[]) {
@@ -113,9 +101,15 @@ int main(int argc, char* argv[]) {
     settings.no_sandbox = true; // Disable sandbox for simplicity in this example
     settings.multi_threaded_message_loop = true;
     settings.log_severity = LOGSEVERITY_INFO;
+    settings.log_file = "nullware_debug.log";
+    
+    // Set user agent
+    settings.user_agent = NULLWARE_USER_AGENT;
     
     // Initialize CEF
     CefMainArgs main_args(argc, argv);
+    
+    // Run CEF
     int exit_code = CefExecuteW(NullWareApp::GetInstance(), main_args);
     
     std::cout << "NullWare Browser - Exiting with code: " << exit_code << std::endl;

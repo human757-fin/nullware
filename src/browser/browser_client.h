@@ -10,13 +10,15 @@
 namespace nullware {
 
 class BrowserWindow;
+class MainWindow;
 class RenderHandler;
 class LoadHandler;
 
 // Browser client implementation for CEF
 class BrowserClient : public CefClient,
                       public CefLifeSpanHandler,
-                      public CefLoadHandler {
+                      public CefLoadHandler,
+                      public CefDownloadHandler {
 public:
     BrowserClient();
     ~BrowserClient() override;
@@ -33,6 +35,8 @@ public:
         bool is_download,
         const CefString& request_initiator,
         bool& disable_default_handling) override;
+    
+    virtual CefRefPtr<CefDownloadHandler> GetDownloadHandler() override;
     
     // CefLifeSpanHandler methods
     virtual void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
@@ -56,11 +60,23 @@ public:
                            const CefString& error_text,
                            const CefString& failed_url) override;
     
-    // Set the browser window
-    void SetBrowserWindow(BrowserWindow* window);
+    // CefDownloadHandler methods
+    virtual void OnBeforeDownload(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefDownloadItem> download_item,
+        const CefString& suggested_name,
+        Callback callback) override;
     
-    // Get the browser window
-    BrowserWindow* GetBrowserWindow();
+    virtual void OnDownloadUpdated(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefDownloadItem> download_item,
+        Callback callback) override;
+    
+    // Set the main window
+    void SetMainWindow(MainWindow* window);
+    
+    // Get the main window
+    MainWindow* GetMainWindow();
     
     // Get the main browser
     CefRefPtr<CefBrowser> GetMainBrowser();
@@ -69,7 +85,7 @@ public:
     void SetMainBrowser(CefRefPtr<CefBrowser> browser);
     
 private:
-    BrowserWindow* browser_window_;
+    MainWindow* main_window_;
     CefRefPtr<CefBrowser> main_browser_;
     std::unique_ptr<RenderHandler> render_handler_;
     std::unique_ptr<LoadHandler> load_handler_;

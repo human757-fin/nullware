@@ -80,7 +80,6 @@ set(COMMON_SOURCES
 )
 
 set(BROWSER_SOURCES
-    src/browser/main.cpp
     src/browser/browser_main.cpp
     src/browser/browser_window.cpp
     src/browser/browser_client.cpp
@@ -98,8 +97,13 @@ set(SECURITY_SOURCES
     src/security/security_manager.cpp
 )
 
-set(DEVTOOLS_SOURCES
-    src/devtools/devtools_manager.h
+set(UI_SOURCES
+    src/ui/main_window.cpp
+    src/ui/toolbar.cpp
+    src/ui/tab_strip.cpp
+    src/ui/address_bar.cpp
+    src/ui/settings_dialog.cpp
+    src/ui/download_manager.cpp
 )
 
 set(MAIN_SOURCES
@@ -112,6 +116,7 @@ add_executable(nullware
     ${BROWSER_SOURCES}
     ${ADBLOCKER_SOURCES}
     ${SECURITY_SOURCES}
+    ${UI_SOURCES}
     ${MAIN_SOURCES}
 )
 
@@ -124,7 +129,6 @@ endif()
 
 if(ENABLE_DEVTOOLS)
     add_definitions(-DENABLE_DEVTOOLS=1)
-    list(APPEND nullware_SOURCES ${DEVTOOLS_SOURCES})
 else()
     add_definitions(-DENABLE_DEVTOOLS=0)
 endif()

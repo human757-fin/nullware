@@ -1,6 +1,6 @@
 #include "src/browser/browser_client.h"
 
-#include "src/browser/browser_window.h"
+#include "src/ui/main_window.h"
 #include "src/browser/render_handler.h"
 #include "src/browser/load_handler.h"
 #include "src/adblocker/ad_blocker.h"
@@ -8,7 +8,7 @@
 
 namespace nullware {
 
-BrowserClient::BrowserClient() : browser_window_(nullptr) {}
+BrowserClient::BrowserClient() : main_window_(nullptr) {}
 
 BrowserClient::~BrowserClient() {}
 
@@ -49,6 +49,13 @@ CefRefPtr<CefResourceRequestHandler> BrowserClient::GetResourceRequestHandler(
     return nullptr;
 }
 
+CefRefPtr<CefDownloadHandler> BrowserClient::GetDownloadHandler() {
+    if (main_window_) {
+        return main_window_->GetDownloadManager();
+    }
+    return nullptr;
+}
+
 void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
     LOG_INFO("Browser created");
     
@@ -56,16 +63,16 @@ void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
         main_browser_ = browser;
     }
     
-    if (browser_window_) {
-        browser_window_->OnBrowserCreated(browser);
+    if (main_window_) {
+        main_window_->OnBrowserCreated(browser);
     }
 }
 
 bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
     LOG_INFO("Browser close requested");
     
-    if (browser_window_) {
-        browser_window_->OnBrowserCloseRequested(browser);
+    if (main_window_) {
+        main_window_->OnBrowserCloseRequested(browser);
     }
     
     // Allow the browser to close
@@ -79,8 +86,8 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
         main_browser_ = nullptr;
     }
     
-    if (browser_window_) {
-        browser_window_->OnBrowserClosed(browser);
+    if (main_window_) {
+        main_window_->OnBrowserClosed(browser);
     }
 }
 
@@ -88,8 +95,8 @@ void BrowserClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                          bool is_loading,
                                          bool can_go_back,
                                          bool can_go_forward) {
-    if (browser_window_) {
-        browser_window_->OnLoadingStateChange(browser, is_loading, can_go_back, can_go_forward);
+    if (main_window_) {
+        main_window_->OnLoadingStateChange(is_loading, can_go_back, can_go_forward);
     }
 }
 
@@ -98,8 +105,8 @@ void BrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser,
                                TransitionType transition_type) {
     LOG_DEBUG("Page load started: " + frame->GetURL().ToString());
     
-    if (browser_window_) {
-        browser_window_->OnLoadStart(browser, frame, transition_type);
+    if (main_window_) {
+        main_window_->OnLoadStart(frame->GetURL().ToString());
     }
 }
 
@@ -109,8 +116,8 @@ void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
     LOG_DEBUG("Page load ended: " + frame->GetURL().ToString() + 
                " with status: " + std::to_string(http_status_code));
     
-    if (browser_window_) {
-        browser_window_->OnLoadEnd(browser, frame, http_status_code);
+    if (main_window_) {
+        main_window_->OnLoadEnd(frame->GetURL().ToString(), http_status_code);
     }
 }
 
@@ -122,17 +129,48 @@ void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser,
     LOG_ERROR("Page load error: " + error_text.ToString() + 
                " (" + std::to_string(error_code) + ")");
     
-    if (browser_window_) {
-        browser_window_->OnLoadError(browser, frame, error_code, error_text, failed_url);
+    if (main_window_) {
+        main_window_->OnLoadError(failed_url.ToString(), error_code, error_text.ToString());
     }
 }
 
-void BrowserClient::SetBrowserWindow(BrowserWindow* window) {
-    browser_window_ = window;
+void BrowserClient::OnBeforeDownload(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    const CefString& suggested_name,
+    Callback callback) {
+    
+    LOG_INFO("Download starting: " + download_item->GetURL().ToString());
+    
+    if (main_window_ && main_window_->GetDownloadManager()) {
+        // Let the download manager handle it
+        main_window_->GetDownloadManager()->OnBeforeDownload(
+            browser, download_item, suggested_name, callback
+        );
+    } else {
+        // Default behavior
+        callback.Continue(suggested_name.ToString(), false);
+    }
 }
 
-BrowserWindow* BrowserClient::GetBrowserWindow() {
-    return browser_window_;
+void BrowserClient::OnDownloadUpdated(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefDownloadItem> download_item,
+    Callback callback) {
+    
+    if (main_window_ && main_window_->GetDownloadManager()) {
+        main_window_->GetDownloadManager()->OnDownloadUpdated(
+            browser, download_item, callback
+        );
+    }
+}
+
+void BrowserClient::SetMainWindow(MainWindow* window) {
+    main_window_ = window;
+}
+
+MainWindow* BrowserClient::GetMainWindow() {
+    return main_window_;
 }
 
 CefRefPtr<CefBrowser> BrowserClient::GetMainBrowser() {
