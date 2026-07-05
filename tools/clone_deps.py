@@ -18,23 +18,36 @@ from pathlib import Path
 
 # Configuration
 DEPS_DIR = "third_party"
-CEF_VERSION = "115.7.180+ge06b462+chromium-115.0.5790.170"
-CEF_DOWNLOAD_URL = f"https://cef-builds.spotifycdn.com/index/cef_binary_{CEF_VERSION}_windows64_minimal.tar.bz2"
+
+# Updated CEF versions (as of 2024)
+# Check https://cef-builds.spotifycdn.com/index/ for available versions
+CEF_VERSIONS = {
+    "windows": "115.7.180+ge06b462+chromium-115.0.5790.170",
+    "macos": "115.7.180+ge06b462+chromium-115.0.5790.170", 
+    "linux": "115.7.180+ge06b462+chromium-115.0.5790.170"
+}
+
+# Try newer versions if available
+NEwer_CEF_VERSIONS = {
+    "windows": "125.7.10+g77bf513+chromium-125.0.6422.60",
+    "macos": "125.7.10+g77bf513+chromium-125.0.6422.60",
+    "linux": "125.7.10+g77bf513+chromium-125.0.6422.60"
+}
 
 # Platform-specific configurations
 PLATFORM_CONFIGS = {
     "windows": {
-        "cef_url": f"https://cef-builds.spotifycdn.com/index/cef_binary_{CEF_VERSION}_windows64_minimal.tar.bz2",
+        "cef_url": "https://cef-builds.spotifycdn.com/index/cef_binary_{version}_windows64_minimal.tar.bz2",
         "cef_dir": "cef",
         "dependencies": []
     },
     "macos": {
-        "cef_url": f"https://cef-builds.spotifycdn.com/index/cef_binary_{CEF_VERSION}_macosx64_minimal.tar.bz2",
+        "cef_url": "https://cef-builds.spotifycdn.com/index/cef_binary_{version}_macosx64_minimal.tar.bz2",
         "cef_dir": "cef",
         "dependencies": []
     },
     "linux": {
-        "cef_url": f"https://cef-builds.spotifycdn.com/index/cef_binary_{CEF_VERSION}_linux64_minimal.tar.bz2",
+        "cef_url": "https://cef-builds.spotifycdn.com/index/cef_binary_{version}_linux64_minimal.tar.bz2",
         "cef_dir": "cef",
         "dependencies": [
             "libgtk-3-dev",
@@ -139,15 +152,18 @@ def install_system_dependencies(platform_name):
         print(f"Failed to install system dependencies: {e}")
         return False
 
-def clone_cef(platform_name):
-    """Clone CEF (Chromium Embedded Framework) for the current platform."""
+def try_download_cef(platform_name, version):
+    """Try to download CEF with a specific version."""
     config = PLATFORM_CONFIGS.get(platform_name, {})
-    cef_url = config.get("cef_url", "")
+    cef_url_template = config.get("cef_url", "")
     cef_dir = config.get("cef_dir", "cef")
     
-    if not cef_url:
-        print("No CEF URL configured for this platform")
+    if not cef_url_template:
+        print("No CEF URL template configured for this platform")
         return False
+    
+    # Format URL with version
+    cef_url = cef_url_template.format(version=version)
     
     # Create third_party directory if it doesn't exist
     os.makedirs(DEPS_DIR, exist_ok=True)
@@ -179,6 +195,45 @@ def clone_cef(platform_name):
     print(f"CEF cloned successfully to {cef_path}")
     return True
 
+def clone_cef(platform_name):
+    """Clone CEF (Chromium Embedded Framework) for the current platform."""
+    print(f"Attempting to download CEF for {platform_name}...")
+    
+    # Try newer version first
+    newer_version = NEwer_CEF_VERSIONS.get(platform_name, "")
+    if newer_version and try_download_cef(platform_name, newer_version):
+        return True
+    
+    # Try original version
+    original_version = CEF_VERSIONS.get(platform_name, "")
+    if original_version and try_download_cef(platform_name, original_version):
+        return True
+    
+    # Try to find available versions
+    print("Trying to find available CEF versions...")
+    try:
+        import requests
+        response = requests.get("https://cef-builds.spotifycdn.com/index/")
+        if response.status_code == 200:
+            # Parse HTML to find available versions
+            import re
+            versions = re.findall(r'cef_binary_([^"<>]+)_' + platform_name + r'64_minimal', response.text)
+            if versions:
+                print(f"Found CEF versions: {versions[:5]}")  # Show first 5
+                # Try the most recent one
+                latest_version = versions[0]
+                if try_download_cef(platform_name, latest_version):
+                    return True
+    except ImportError:
+        print("requests module not available, cannot check for newer versions")
+    except Exception as e:
+        print(f"Failed to check for newer versions: {e}")
+    
+    print("Failed to download CEF automatically")
+    print("Please download CEF manually from: https://cef-builds.spotifycdn.com/")
+    print(f"And extract to: {os.path.join(DEPS_DIR, 'cef')}")
+    return False
+
 def clone_dependencies():
     """Clone all dependencies for the current platform."""
     platform_name = get_platform()
@@ -191,6 +246,8 @@ def clone_dependencies():
     # Clone CEF
     if not clone_cef(platform_name):
         print("Warning: Failed to clone CEF")
+        print("You can still build if you have CEF installed system-wide")
+        print("Or manually download CEF from https://cef-builds.spotifycdn.com/")
         return False
     
     print("Dependencies cloned successfully")
@@ -203,6 +260,10 @@ def main():
     
     if not clone_dependencies():
         print("Failed to clone dependencies")
+        print("\nYou can still try to build with:")
+        print("  mkdir build && cd build")
+        print("  cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_SYSTEM_CEF=ON")
+        print("  cmake --build . -j$(nproc)")
         sys.exit(1)
     
     print("\nDependency cloning complete!")
